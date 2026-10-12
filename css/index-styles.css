@@ -1,0 +1,382 @@
+:root {
+  --bg: #0f1117;
+  --panel: #171a23;
+  --panel-2: #1e222d;
+  --border: #2a2f3d;
+  --text: #e6e8ee;
+  --muted: #9aa1b1;
+  --accent: #3ecf8e;
+  /* supabase green */
+  --accent-dim: #2ea36f;
+  --danger: #ff6b6b;
+  --warn: #ffc457;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 32px 20px 64px;
+  background: radial-gradient(1200px 600px at 50% -200px, #1b2030 0%, var(--bg) 60%);
+  color: var(--text);
+  font:
+    15px/1.5 ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  min-height: 100vh;
+}
+
+.wrap {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+header {
+  margin-bottom: 24px;
+}
+
+h1 {
+  font-size: 24px;
+  margin: 0 0 6px;
+  letter-spacing: -0.3px;
+}
+
+header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  background: #0b0d13;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+/* ---------- setup banner ---------- */
+#setup {
+  display: none;
+  border-color: #4a3a1a;
+  background: linear-gradient(180deg, #241d0f 0%, #1b1710 100%);
+}
+
+#setup h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: var(--warn);
+}
+
+#setup p {
+  margin: 0 0 12px;
+  color: #d8cdb4;
+  font-size: 14px;
+}
+
+#setup pre {
+  background: #0b0d13;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  overflow-x: auto;
+  margin: 0 0 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #cfe8dc;
+}
+
+/* ---------- dropzone ---------- */
+#drop {
+  border: 2px dashed var(--border);
+  border-radius: 14px;
+  padding: 40px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    transform 0.15s;
+  background: var(--panel-2);
+}
+
+#drop:hover {
+  border-color: #3d4457;
+}
+
+#drop.over {
+  border-color: var(--accent);
+  background: #17251f;
+  transform: scale(1.005);
+}
+
+#drop .big {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+#drop .small {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+#drop .icon {
+  font-size: 30px;
+  margin-bottom: 10px;
+  opacity: 0.8;
+}
+
+/* ---------- preview ---------- */
+#preview {
+  display: none;
+  margin-top: 18px;
+}
+
+.preview-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+#thumb {
+  width: 84px;
+  height: 84px;
+  flex: 0 0 84px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #0b0d13;
+}
+
+.meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.meta .fname {
+  font-weight: 600;
+  font-size: 14px;
+  word-break: break-all;
+  margin-bottom: 3px;
+}
+
+.meta .fsize {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+button {
+  font: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  padding: 10px 18px;
+  cursor: pointer;
+  transition:
+    filter 0.15s,
+    opacity 0.15s;
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #06231a;
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+}
+
+/* ---------- status ---------- */
+#status {
+  display: none;
+  margin-top: 16px;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+
+#status.info {
+  background: #16202b;
+  border: 1px solid #24405a;
+  color: #a9d3f5;
+}
+
+#status.ok {
+  background: #14251d;
+  border: 1px solid #24503a;
+  color: #93e9c0;
+}
+
+#status.error {
+  background: #2a1618;
+  border: 1px solid #5a262a;
+  color: #ffb3b3;
+}
+
+#status .title {
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+
+#status .detail {
+  font-size: 13px;
+  opacity: 0.95;
+  word-break: break-word;
+}
+
+#status pre {
+  margin: 8px 0 0;
+  background: #0b0d13;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  overflow-x: auto;
+  font-size: 12px;
+  color: #cfe8dc;
+}
+
+.url-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.url-row input {
+  flex: 1;
+  min-width: 0;
+  font:
+    12.5px/1.4 ui-monospace,
+    Menlo,
+    Consolas,
+    monospace;
+  background: #0b0d13;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+
+.url-row button {
+  padding: 9px 14px;
+  font-size: 13px;
+}
+
+/* ---------- gallery ---------- */
+.gal-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.gal-head h2 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.gal-head .count {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+#gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 12px;
+}
+
+.tile {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.tile .ph {
+  width: 100%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0b0d13;
+  color: var(--muted);
+  font-size: 22px;
+  overflow: hidden;
+}
+
+.tile .ph img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tile .cap {
+  padding: 7px 9px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.tile .cap .id {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 8px 0;
+}
+
+.spin {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  vertical-align: -2px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  margin-right: 7px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

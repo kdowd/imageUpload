@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Image Upload &rarr; Supabase</title>
+  <link rel="stylesheet" href="./css/index-styles.css">
+</head>
+
+<body>
+  <div class="wrap">
+
+    <header>
+      <h1>Image Upload</h1>
+      <p>Uploads to the <code>images</code> storage bucket and records the path in the <code>images</code> table.</p>
+    </header>
+
+    <!-- Shown only when the bucket is missing / not reachable -->
+    <div class="card" id="setup">
+      <h2>&#9888;&#65039; Setup needed: the <code>images</code> bucket doesn't exist yet</h2>
+      <p>The publishable key can't create buckets. Run this once in your Supabase
+        <strong>SQL Editor</strong> (Dashboard &rarr; SQL Editor &rarr; New query), then reload this page:
+      </p>
+      <pre id="setupSql"></pre>
+      <button class="btn-ghost" onclick="location.reload()">Reload page</button>
+    </div>
+
+    <!-- Upload -->
+    <div class="card">
+      <div id="drop">
+        <div class="icon">&#128444;&#65039;</div>
+        <div class="big">Drop an image here, or click to choose</div>
+        <div class="small">PNG, JPG, GIF, WebP, SVG &middot; up to 5 MB</div>
+      </div>
+      <input type="file" id="file" accept="image/*" hidden />
+
+      <div id="preview">
+        <div class="preview-row">
+          <img id="thumb" alt="preview" />
+          <div class="meta">
+            <div class="fname" id="fname"></div>
+            <div class="fsize" id="fsize"></div>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn-primary" id="uploadBtn">Upload to Supabase</button>
+          <button class="btn-ghost" id="clearBtn">Clear</button>
+        </div>
+      </div>
+
+      <div id="status"></div>
+    </div>
+
+    <!-- Gallery -->
+    <div class="card">
+      <div class="gal-head">
+        <h2>Saved images</h2>
+        <span class="count" id="count"></span>
+      </div>
+      <div id="gallery">
+        <div class="empty">Loading&hellip;</div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4"></script>
+  <script>
+    /* ------------------------------------------------------------------
+       CONFIG — these two values are safe to ship in a browser page.
+       The publishable key is public by design; access is governed by RLS.
+    ------------------------------------------------------------------- */
+    const SUPABASE_URL = 'https://decwucuwqnzrxzbxxifu.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_ONnalS_8pdIUH2Qrsz67CA_z4Wco9I2';
+
+    const BUCKET = 'app_assets';   // storage bucket
+    const TABLE = 'images';   // database table
+    const MAX_MB = 5;
+
+    const SETUP_SQL = `-- 1. create a public bucket named "images"
+insert into storage.buckets (id, name, public)
+values ('images', 'images', true)
+on conflict (id) do nothing;
+
+-- 2. allow anonymous visitors to upload into that bucket
+create policy "anon can upload to images"
+on storage.objects for insert to anon
+with check (bucket_id = 'images');
+
+-- 3. allow anonymous visitors to read/list that bucket
+create policy "anon can read images"
+on storage.objects for select to anon
+using (bucket_id = 'images');`;
+
+    /* ------------------------------------------------------------------ */
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const $ = (id) => document.getElementById(id);
+    const drop = $('drop'), fileInput = $('file'), preview = $('preview');
+    const thumb = $('thumb'), fname = $('fname'), fsize = $('fsize');
+    const statusEl = $('status'), uploadBtn = $('uploadBtn'), gallery = $('gallery');
+
+    let selectedFile = null;
+    let previewUrl = null;
+
+    /* ---------- helpers ---------- */
+    const fmtSize = (b) =>
+      b < 1024 ? b + ' B'
+        : b < 1024 * 1024 ? (b / 1024).toFixed(1) + ' KB'
+          : (b / 1048576).toFixed(2) + ' MB';
+
+    // Keep the original name readable but strip anything unsafe for a storage key.
+    function safeName(name) {
+      const dot = name.lastIndexOf('.'); compleatly;
+      const base = (dot > 0 ? name.slice(0, dot) : name)
+        .toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'image';
+      const ext = dot > 0 ? name.slice(dot).toLowerCase().replace(/[^a-z0-9.]/g, '') : '';
+      return base + ext;
+    }
+
+    function uniquePath(name) {
+      const rand = (crypto.randomUUID && crypto.randomUUID())
+        || (Date.now().toString(36) + Math.random().toString(36).slice(2));
+      return `${rand}-${safeName(name)}`;
+    }
+
+    function showStatus(kind, title, detail, extraHtml) {
+      statusEl.className = kind;
+      statusEl.style.display = 'block';
+      statusEl.innerHTML = '';
+      const t = document.createElement('div'); t.className = 'title'; t.textContent = title;
+      statusEl.appendChild(t);
+      if (detail) {
+        const d = document.createElement('div'); d.className = 'detail'; d.textContent = detail;
+        statusEl.appendChild(d);
+      }
+      if (extraHtml) statusEl.insertAdjacentHTML('beforeend', extraHtml);
+    }
+    const hideStatus = () => { statusEl.style.display = 'none'; };
+
+    /* Turn raw Supabase errors into something actionable. */
+    function explain(error) {
+      const m = (error && error.message) || String(error);
+      if (/bucket not found/i.test(m))
+        return {
+          title: 'Bucket "images" not found',
+          detail: 'Create it in the Supabase dashboard, or run the setup SQL shown at the top of this page.',
+          showSetup: true
+        };
+      if (/row-level security|violates row-level/i.test(m))
+        return {
+          title: 'Blocked by a row-level security policy',
+          detail: 'The bucket exists, but anonymous uploads are not permitted. Run the setup SQL at the top of this page to add the storage policies.',
+          showSetup: true
+        };
+      if (/failed to fetch|networkerror|load failed/i.test(m))
+        return {
+          title: 'Network / CORS error',
+          detail: 'Could not reach Supabase. Serve this page over http:// (not file://) and check your connection.'
+        };
+      if (/exceeded the maximum allowed size|payload too large|entity too large/i.test(m))
+        return { title: 'File too large', detail: 'The storage bucket rejected this file. Increase the bucket size limit or pick a smaller file.' };
+      if (/duplicate key|already exists/i.test(m))
+        return { title: 'That file already exists', detail: m + ' — try uploading again.' };
+      return { title: 'Something went wrong', detail: m };
+    }
+
+    /* ---------- file selection ---------- */
+    drop.addEventListener('click', () => fileInput.click());
+    drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      drop.classList.remove('over');
+      if (e.dataTransfer.files.length) selectFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) selectFile(e.target.files[0]);
+    });
+
+    function selectFile(file) {
+      if (!file.type.startsWith('image/')) {
+        showStatus('error', 'Not an image', `"${file.name}" is ${file.type || 'an unknown type'}. Please choose an image file.`);
+        return;
+      }
+      if (file.size > MAX_MB * 1024 * 1024) {
+        showStatus('error', 'File too large', `That file is ${fmtSize(file.size)}. The limit here is ${MAX_MB} MB.`);
+        return;
+      }
+      selectedFile = file;
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      previewUrl = URL.createObjectURL(file);
+      thumb.src = previewUrl;
+      fname.textContent = file.name;
+      fsize.textContent = `${fmtSize(file.size)} · ${file.type || 'image'}`;
+      preview.style.display = 'block';
+      drop.style.display = 'none';
+      hideStatus();
+    }
+
+    function reset() {
+      selectedFile = null;
+      fileInput.value = '';
+      if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+      preview.style.display = 'none';
+      drop.style.display = 'block';
+      hideStatus();
+    }
+    $('clearBtn').addEventListener('click', reset);
+
+    /* ---------- upload ---------- */
+    uploadBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+      uploadBtn.disabled = true;
+      showStatus('info', 'Uploading\u2026', `${selectedFile.name} (${fmtSize(selectedFile.size)})`);
+
+      const path = uniquePath(selectedFile.name);
+
+      // 1. storage upload
+      const { error: upErr } = await sb.storage.from(BUCKET).upload(path, selectedFile, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: selectedFile.type || 'application/octet-stream',
+      });
+
+      if (upErr) {
+        const e = explain(upErr);
+        showStatus('error', e.title, e.detail, e.showSetup ? `<pre>${SETUP_SQL}</pre>` : '');
+        if (e.showSetup) $('setup').style.display = 'block';
+        uploadBtn.disabled = false;
+        return;
+      }
+
+      // 2. record the path in the images table
+      showStatus('info', 'Saving to the images table\u2026', path);
+      const { data: row, error: dbErr } = await sb.from(TABLE).insert({ path }).select().single();
+
+      if (dbErr) {
+        const e = explain(dbErr);
+        showStatus('error',
+          'Image uploaded, but the database row failed',
+          `${e.title}. ${e.detail} The file is in storage at "${path}" but is not recorded in the table.`);
+        uploadBtn.disabled = false;
+        loadGallery();
+        return;
+      }
+
+      // 3. success
+      const { data: pub } = sb.storage.from(BUCKET).getPublicUrl(path);
+      const url = pub.publicUrl;
+
+      statusEl.className = 'ok';
+      statusEl.style.display = 'block';
+      statusEl.innerHTML = '';
+
+      const t = document.createElement('div');
+      t.className = 'title';
+      t.textContent = `\u2713 Uploaded and saved (row id ${row.id})`;
+      statusEl.appendChild(t);
+
+      const d = document.createElement('div');
+      d.className = 'detail';
+      d.textContent = 'Storage path recorded in the images table: ' + row.path;
+      statusEl.appendChild(d);
+
+      const urlRow = document.createElement('div');
+      urlRow.className = 'url-row';
+      const inp = document.createElement('input');
+      inp.value = url; inp.readOnly = true;
+      inp.addEventListener('focus', () => inp.select());
+      const copy = document.createElement('button');
+      copy.className = 'btn-ghost';
+      copy.textContent = 'Copy URL';
+      copy.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(url); copy.textContent = 'Copied!'; }
+        catch { inp.select(); document.execCommand('copy'); copy.textContent = 'Copied!'; }
+        setTimeout(() => (copy.textContent = 'Copy URL'), 1600);
+      });
+      urlRow.appendChild(inp); urlRow.appendChild(copy);
+      statusEl.appendChild(urlRow);
+
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = 'uploaded image';
+      img.style.cssText = 'margin-top:14px;max-width:180px;border-radius:10px;border:1px solid var(--border);display:block';
+      statusEl.appendChild(img);
+
+      uploadBtn.disabled = false;
+      reset.preserveStatus = true;
+      // keep the success panel visible, but clear the picker for the next upload
+      selectedFile = null;
+      fileInput.value = '';
+      if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+      preview.style.display = 'none';
+      drop.style.display = 'block';
+
+      loadGallery();
+    });
+
+    /* ---------- gallery ---------- */
+    async function loadGallery() {
+      const { data, error } = await sb.from(TABLE).select('id,path').order('id', { ascending: false });
+
+      if (error) {
+        const e = explain(error);
+        gallery.innerHTML = '';
+        const div = document.createElement('div');
+        div.className = 'empty';
+        div.textContent = `Could not load saved images: ${e.title}. ${e.detail}`;
+        gallery.appendChild(div);
+        $('count').textContent = '';
+        return;
+      }
+
+      gallery.innerHTML = '';
+      $('count').textContent = data.length ? `${data.length} row${data.length === 1 ? '' : 's'}` : '';
+
+      if (!data.length) {
+        const div = document.createElement('div');
+        div.className = 'empty';
+        div.textContent = 'No images recorded yet. Upload one above to get started.';
+        gallery.appendChild(div);
+        return;
+      }
+
+      for (const row of data) {
+        const { data: pub } = sb.storage.from(BUCKET).getPublicUrl(row.path);
+
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+
+        const ph = document.createElement('div');
+        ph.className = 'ph';
+        ph.textContent = '\uD83D\uDDBC\uFE0F';
+        const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.alt = row.path;
+        img.src = pub.publicUrl;
+        img.addEventListener('error', () => img.remove()); // keep placeholder if it can't load
+        ph.appendChild(img);
+
+        const cap = document.createElement('div');
+        cap.className = 'cap';
+        const idSpan = document.createElement('span');
+        idSpan.className = 'id';
+        idSpan.textContent = '#' + row.id + ' ';
+        cap.appendChild(idSpan);
+        cap.appendChild(document.createTextNode(row.path));   // textContent => no XSS
+
+        tile.appendChild(ph);
+        tile.appendChild(cap);
+        gallery.appendChild(tile);
+      }
+    }
+
+    /* ---------- startup: is the bucket there? ---------- */
+    (async function checkSetup() {
+      $('setupSql').textContent = SETUP_SQL;
+      try {
+        // NOTE: list() returns an empty array (not an error) for a missing bucket,
+        // so getBucket() is the reliable existence check here.
+        const { error } = await sb.storage.getBucket(BUCKET);
+        if (error && /bucket not found|nosuchbucket/i.test(`${error.message || ''} ${error.name || ''}`)) {
+          $('setup').style.display = 'block';
+        }
+      } catch (_) { /* ignore — the gallery will surface anything important */ }
+      loadGallery();
+    })();
+  </script>
+</body>
+
+</html>
